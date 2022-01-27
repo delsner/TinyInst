@@ -19,6 +19,7 @@ limitations under the License.
 #include <stdio.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <atlstr.h>
 
 #include "windows.h"
 #include "psapi.h"
@@ -459,6 +460,35 @@ void *Debugger::RemoteAllocateAfter(uint64_t min_address,
   }
 
   return ret_address;
+}
+
+// Read debug string from debugee's address space and convert to regular string.
+// Shamelessly taken from: https://www.codeproject.com/Articles/43682/Writing-a-basic-Windows-debugger
+std::string Debugger::CopyAndConvertDebugString(OUTPUT_DEBUG_STRING_INFO& DebugString)
+{
+    CStringW strEventMessage;  // Force Unicode
+
+    // Don't care if string is ANSI, we allocate double with WCHAR.
+    WCHAR* msg = new WCHAR[DebugString.nDebugStringLength];
+
+    ReadProcessMemory(child_handle,       // HANDLE to debuggee
+        DebugString.lpDebugStringData,    // Target process' valid pointer
+        msg,                              // Copy to this address space
+        DebugString.nDebugStringLength,
+        NULL);
+
+    // `fUnicode` will be set to 1 in case of unicode string.
+    if (DebugString.fUnicode)
+        strEventMessage = msg;
+    else
+        strEventMessage = (char*)msg; // char* to CStringW (Unicode) conversion.
+
+    // Convert unicode string to regular C++ string.
+    std::string debug_string = std::string(CW2A(strEventMessage, CP_UTF8));
+
+    // TODO: check if this can leak in case ReadProcessMemory fails (returns 0)
+    delete[]msg;
+    return debug_string;
 }
 
 void Debugger::RemoteFree(void *address, size_t size) {
@@ -1536,6 +1566,11 @@ DebuggerStatus Debugger::DebugLoop(uint32_t timeout, bool killing)
       OnModuleUnloaded(DebugEv->u.UnloadDll.lpBaseOfDll);
       break;
 
+    case OUTPUT_DEBUG_STRING_EVENT:
+      if (trace_debug_events)
+        printf("Debugger: Received output debug string\n");
+      OnOutputDebugString(CopyAndConvertDebugString(DebugEv->u.DebugString));
+      break;
    default:
       break;
     }

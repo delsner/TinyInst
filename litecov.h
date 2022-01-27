@@ -93,6 +93,8 @@ protected:
   virtual void OnModuleEntered(ModuleInfo *module, size_t entry_address) override;
   virtual bool OnException(Exception *exception_record) override;
 
+  virtual void OnOutputDebugString(std::string debug_string) override;
+
   virtual void InstrumentBasicBlock(ModuleInfo *module, size_t bb_address) override;
   virtual void InstrumentEdge(ModuleInfo *previous_module,
                               ModuleInfo *next_module,
@@ -143,6 +145,7 @@ protected:
 private:
   CovType coverage_type;
   bool compare_coverage;
+  bool dump_debug;
 };
 
 #endif // LITECOV_H

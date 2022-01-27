@@ -49,6 +49,8 @@ void LiteCov::Init(int argc, char **argv) {
 
   compare_coverage = GetBinaryOption("-cmp_coverage", argc, argv, false);
 
+  dump_debug = GetBinaryOption("-dump_on_debug", argc, argv, false);
+
   for (ModuleInfo *module : instrumented_modules) {
     module->client_data = new ModuleCovData();
   }
@@ -248,6 +250,21 @@ bool LiteCov::OnException(Exception *exception_record) {
   }
 
   return TinyInst::OnException(exception_record);
+}
+
+void LiteCov::OnOutputDebugString(std::string debug_string)
+{
+    if (trace_debug_events)
+        printf("Litecov: Received debug string: %s\n", debug_string.c_str());
+    if (dump_debug) {
+        // Get current coverage and clear coverage
+        Coverage coverage;
+        GetCoverage(coverage, true);
+        // Write coverage to file.
+        std::string filename = debug_string + ".cov";
+        printf("Litecov: Writing coverage to file %s\n", filename.c_str());
+        WriteCoverage(coverage, filename.data());
+    }
 }
 
 void LiteCov::ClearRemoteBuffer(ModuleCovData *data) {

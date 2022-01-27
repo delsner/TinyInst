@@ -90,8 +90,9 @@ protected:
   virtual void OnModuleUnloaded(void *module);
   virtual void OnTargetMethodReached() {}
   virtual void OnProcessCreated();
-  virtual void OnProcessExit() {};
+  virtual void OnProcessExit() {}
   virtual void OnEntrypoint();
+  virtual void OnOutputDebugString(std::string debug_string) {}
 
   // should return true if the exception has been handled
   virtual bool OnException(Exception *exception_record) {
@@ -174,6 +175,7 @@ private:
                             uint64_t max_address,
                             size_t size,
                             MemoryProtection protection);
+  std::string CopyAndConvertDebugString(OUTPUT_DEBUG_STRING_INFO& DebugString);
 
 protected:
 

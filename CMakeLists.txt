@@ -151,3 +151,13 @@ add_executable(litecov
 
 target_link_libraries(litecov tinyinst)
 endif()
+
+if(NOT (${ARCHITECTURE} MATCHES arm64) AND WIN32)
+project("litecov-resolver")
+
+add_executable(litecov-resolver
+  "litecov-resolver.cpp"
+)
+
+target_link_libraries(litecov-resolver tinyinst)
+endif()
