@@ -37,6 +37,31 @@ struct CoverageReport {
 	}
 };
 
+// Utils.
+BOOL CALLBACK EnumSymProc(
+	PSYMBOL_INFO pSymInfo,
+	ULONG SymbolSize,
+	PVOID UserContext)
+{
+	UNREFERENCED_PARAMETER(UserContext);
+
+	printf("0x%llx %4u %s\n",
+		pSymInfo->Address, SymbolSize, pSymInfo->Name);
+	return TRUE;
+}
+
+BOOL CALLBACK EnumModules(
+	PCTSTR  ModuleName,
+	DWORD64 BaseOfDll,
+	PVOID   UserContext)
+{
+	UNREFERENCED_PARAMETER(UserContext);
+
+	printf("0x%llx %s\n", BaseOfDll, ModuleName);
+	return TRUE;
+}
+
+// Main routine.
 int main(int argc, char** argv)
 {
 	char* root_arg = GetOption("-root", argc, argv);
@@ -93,6 +118,7 @@ int main(int argc, char** argv)
 	CoverageReport coverageReport;
 	coverageReport.output_file = output_file;
 	HANDLE current_proc_handle = GetCurrentProcess();
+	printf("DEBUG: Using current process handle %d\n", current_proc_handle);
 	bool symbol_handler_initialized = false;
 	std::map<std::string, uint64_t> loaded_modules;
 	for (const auto& path : fs::directory_iterator(root)) {
@@ -116,9 +142,10 @@ int main(int argc, char** argv)
 						if (!SymInitialize(
 							current_proc_handle,                // Current process handle, although this simply has to be a UID.
 							symbol_search_path.c_str(),         // User search path for symbols, semicolon-separated list of symbol modules (search for symbol files is done recursively).
-							TRUE)) {                            // fInvadeProcess is set to true, to load symbols for all already loaded modules.
+							FALSE)) {                           // fInvadeProcess is set to false, to skip loading symbols for already loaded modules.
 							error = GetLastError();
 							printf("ERROR: SymInitialize returned error: %d\n", error);
+							SymCleanup(current_proc_handle);
 							return 1;
 						}
 						symbol_handler_initialized = true;
@@ -144,6 +171,7 @@ int main(int argc, char** argv)
 							error = GetLastError();
 							if (error != ERROR_SUCCESS) {
 								printf("ERROR: SymLoadModuleEx returned error: %d\n", error);
+								SymCleanup(current_proc_handle);
 								return 1;
 							}
 						}
@@ -158,6 +186,26 @@ int main(int argc, char** argv)
 								printf("DEBUG: Loaded module info, image name (%s), base address (0x%llx)\n",
 									moduleInfo.ImageName, moduleInfo.BaseOfImage);
 							}
+							if (SymEnumSymbols(current_proc_handle,     // Process handle from SymInitialize.
+								dwDllBase,								// Base address of module.
+								"unittests!foo*",						// Name of symbols to match.
+								EnumSymProc,							// Symbol handler procedure.
+								NULL))									// User context.
+							{
+								// SymEnumSymbols succeeded
+							}
+							else
+							{
+								printf("SymEnumSymbols failed: %d\n", GetLastError());
+							}
+							if (SymEnumerateModules64(current_proc_handle, EnumModules, NULL))
+							{
+							}
+							else
+							{
+								error = GetLastError();
+								printf("SymEnumerateModules64 returned error : %d\n", error);
+							}
 						}
 					}
 					DWORD dwDisplacement;
@@ -171,12 +219,12 @@ int main(int argc, char** argv)
 						covered_address.line_number = symbol_line.LineNumber;
 						printf("DEBUG: Found filename (%s) and line (%d)\n", covered_address.filename, covered_address.line_number);
 						coverageReport.covered_addresses.push_back(covered_address);
-						return 2;
 					}
 					else {
 						error = GetLastError();
 						if (error != ERROR_SUCCESS) {
-							printf("ERROR: SymGetLineFromAddr64 returned error : %d\n", error);
+							printf("ERROR: SymGetLineFromAddr64 returned error: %d\n", error);
+							SymCleanup(current_proc_handle);
 							return 1;
 						}
 					}
