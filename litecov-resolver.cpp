@@ -134,8 +134,7 @@ int main(int argc, char** argv)
 							error = GetLastError();
 							if (error != ERROR_SUCCESS) {
 								printf("ERROR: SymLoadModuleEx returned error: %d\n", error);
-								SymCleanup(current_proc_handle);
-								return 1;
+								continue;
 							}
 						}
 						else {
