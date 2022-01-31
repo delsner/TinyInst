@@ -20,7 +20,6 @@ limitations under the License.
 #include <stdbool.h>
 #include <inttypes.h>
 #include <algorithm>
-#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <list>
