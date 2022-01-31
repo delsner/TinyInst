@@ -174,7 +174,7 @@ int main(int argc, char** argv)
 		printf("DEBUG: Done with symbol handler, cleaning up now...\n");
 		SymCleanup(current_proc_handle);
 	}
-	printf("DEBUG: Writing collected coverage to output file %s.\n", coverageReport.output_file.string());
+	printf("DEBUG: Writing collected coverage to output file %s.\n", coverageReport.output_file.string().c_str());
 	coverageReport.WriteToFile();
 	// TODO: Add other export strategy here for standardized output format, e.g., to visualize line coverage.
 
