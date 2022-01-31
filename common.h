@@ -73,7 +73,7 @@ struct AddressRange {
 uint64_t GetCurTime(void);
 
 char *GetOption(const char *name, int argc, char** argv);
-char* GetOptionOrDefault(const char* name, int argc, char** argv, char* default_value);
+char *GetOptionOrDefault(const char* name, int argc, char** argv, char* default_value);
 void GetOptionAll(const char *name, int argc, char** argv, std::list<char *> *results);
 bool GetBinaryOption(const char *name, int argc, char** argv, bool default_value);
 int GetIntOption(const char *name, int argc, char** argv, int default_value);

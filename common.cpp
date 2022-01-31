@@ -71,7 +71,7 @@ char *GetOption(const char *name, int argc, char** argv) {
   return NULL;
 }
 
-char* GetOptionOrDefault(const char* name, int argc, char** argv, char* default_value) {
+char *GetOptionOrDefault(const char* name, int argc, char** argv, char* default_value) {
     char* value = GetOption(name, argc, argv);
     if (!value)
         return default_value;
