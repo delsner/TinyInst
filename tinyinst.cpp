@@ -20,7 +20,9 @@ limitations under the License.
 #include <stdbool.h>
 #include <inttypes.h>
 #include <algorithm>
-
+#include <iostream>
+#include <filesystem>
+#include <fstream>
 #include <list>
 
 #include "tinyinst.h"
@@ -1138,6 +1140,22 @@ void TinyInst::Init(int argc, char **argv) {
 
   std::list <char *> module_names;
   GetOptionAll("-instrument_module", argc, argv, &module_names);
+
+  // Allow passing a file containing all modules (newline-separated).
+  // This is useful when cmd.exe has a command line length limit.
+  char* module_list_file = GetOption("-instrument_modules_file", argc, argv);
+  if (module_list_file) {
+      if (trace_debug_events)
+        printf("Debugger: Found file containing instrumented modules at %s.\n", module_list_file);
+      std::filesystem::path module_list_path = std::filesystem::path(module_list_file);
+      std::ifstream is(module_list_path);
+      std::string line;
+      while (std::getline(is, line))
+      {
+          if (!line.empty())
+            module_names.push_back(line.data());
+      }
+  }
 
 #if defined(__APPLE__) && defined(ARM64)
   std::set <std::string> orig_uniq_mod_names;
