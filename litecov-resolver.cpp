@@ -98,7 +98,7 @@ struct CoverageReport {
 // Main routine.
 int main(int argc, char** argv)
 {
-	bool drop_duplicate_lines = GetBinaryOption("-drop_duplicate_lines", argc, argv, true);
+	bool drop_duplicate_lines = GetBinaryOption("-drop_duplicate_lines", argc, argv, false);
 	std::string ext = std::string(GetOptionOrDefault("-ext", argc, argv, ".cov"));
 	std::regex regex = std::regex(GetOptionOrDefault("-regex", argc, argv, ".*"));
 	std::string root = std::string(GetOptionOrDefault("-root", argc, argv, "."));
