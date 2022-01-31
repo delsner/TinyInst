@@ -125,7 +125,7 @@ int main(int argc, char** argv)
 
 	DWORD dwDisplacement;
 	IMAGEHLP_LINE64 symbol_line;
-	int symbol_address = 0x1131;
+	int symbol_address = 0x12a6d;
 	memset(&symbol_line, 0x0, sizeof(symbol_line));
 	symbol_line.SizeOfStruct = sizeof(symbol_line);
 	printf("DEBUG: Looking up symbol at address: %llx (%llx + %llx)\n", (dwDllBase + symbol_address), dwDllBase, symbol_address);
@@ -137,8 +137,28 @@ int main(int argc, char** argv)
 		if (error != ERROR_SUCCESS) {
 			printf("ERROR: SymGetLineFromAddr64 returned error: %d\n", error);
 			SymCleanup(current_proc_handle);
-			return 1;
 		}
+	}
+
+	DWORD64 dwDp = 0;
+	char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
+	PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
+
+	pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+	pSymbol->MaxNameLen = MAX_SYM_NAME;
+
+	if (SymFromAddr(current_proc_handle, dwDllBase + symbol_address, &dwDp, pSymbol))
+	{
+		// Get undecorated symbol name (e.g., function name).
+		char undecoratedName[MAX_SYM_NAME];
+		UnDecorateSymbolName(pSymbol->Name, undecoratedName, MAX_SYM_NAME, UNDNAME_COMPLETE);
+		printf("Symbol info %s\n", undecoratedName);
+	}
+	else
+	{
+		// SymFromAddr failed
+		DWORD error = GetLastError();
+		printf("SymFromAddr returned error : %d\n", error);
 	}
 
 	// Cleanup symbol handler.

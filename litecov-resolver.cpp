@@ -12,26 +12,42 @@
 namespace fs = std::filesystem;
 
 struct CoveredAddress {
-	std::string test_identifier;
 	std::string module_name;
 	uint64_t offset;
 	std::string filename;
 	int line_number;
+
+	inline bool operator==(const CoveredAddress& rhs) const {
+		return (filename + std::to_string(line_number)).compare(rhs.filename + std::to_string(rhs.line_number)) == 0;
+	}
+};
+
+struct TestCoverage {
+	std::string test_identifier;
+	std::vector<CoveredAddress> covered_addresses;
+
+	bool Contains(const CoveredAddress &covered_address) {
+		std::vector<CoveredAddress>::iterator it;
+		it = std::find(covered_addresses.begin(), covered_addresses.end(), covered_address);
+		return it != covered_addresses.end();
+	}
 };
 
 struct CoverageReport {
-	std::vector<CoveredAddress> covered_addresses;
+	std::vector<TestCoverage> covered_tests;
 	fs::path output_file;
 
-	void WriteToFile() {
+	void SaveAsCSV() {
 		std::fstream file_stream;
 		file_stream.open(output_file, std::fstream::out);
-		for (const auto& covered_address : covered_addresses) {
-			file_stream << covered_address.test_identifier << ","
-				<< covered_address.module_name << ","
-				<< "+0x" << std::hex << covered_address.offset << ","
-				<< covered_address.filename << ","
-				<< std::dec << covered_address.line_number << "\n";
+		for (const auto& covered_test : covered_tests) {
+			for (const auto& covered_address : covered_test.covered_addresses) {
+				file_stream << covered_test.test_identifier << ","
+					<< covered_address.module_name << ","
+					<< "+0x" << std::hex << covered_address.offset << ","
+					<< covered_address.filename << ","
+					<< std::dec << covered_address.line_number << "\n";
+			}
 		}
 		file_stream.close();
 	}
@@ -40,6 +56,7 @@ struct CoverageReport {
 // Main routine.
 int main(int argc, char** argv)
 {
+	bool drop_duplicate_lines = GetBinaryOption("-drop_duplicate_lines", argc, argv, false);
 	std::string ext = std::string(GetOptionOrDefault("-ext", argc, argv, ".cov"));
 	std::regex regex = std::regex(GetOptionOrDefault("-regex", argc, argv, ".*"));
 	std::string root = std::string(GetOptionOrDefault("-root", argc, argv, "."));
@@ -54,6 +71,8 @@ int main(int argc, char** argv)
 		printf("%s [options]\n", argv[0]);
 		printf("\n");
 		printf("Options:\n");
+		printf("-drop_duplicate_lines\n");
+		printf("\tdefault: false\n");
 		printf("-ext <file extension for coverage files>\n");
 		printf("\tdefault: .cov\n");
 		printf("-regex <regex for included files>\n");
@@ -62,7 +81,7 @@ int main(int argc, char** argv)
 		printf("\tdefault: current working directory\n");
 		printf("-symbol_path <symbol path for covered module>\n");
 		printf("\trequired: provide at least one symbol path (searched recursively)\n");
-		printf("-output <output CSV filename>\n");
+		printf("-output <output filename>\n");
 		printf("\tdefault: coverage.csv\n");
 		return 0;
 	}
@@ -78,8 +97,8 @@ int main(int argc, char** argv)
 	symbol_search_path += "SRV*c:\\symbolcache*https://msdl.microsoft.com/download/symbols";
 
 	// Collect all coverage files in directory with coverage extension.
-	CoverageReport coverageReport;
-	coverageReport.output_file = output_file;
+	CoverageReport coverage_report;
+	coverage_report.output_file = output_file;
 	HANDLE current_proc_handle = GetCurrentProcess();
 	printf("DEBUG: Using current process handle %d\n", current_proc_handle);
 	bool symbol_handler_initialized = false;
@@ -88,13 +107,14 @@ int main(int argc, char** argv)
 		if (path.path().extension() == ext) {
 			std::ifstream is(path.path());
 			std::string line;
+			TestCoverage test_coverage;
+			test_coverage.test_identifier = path.path().stem().string();
 			while (std::getline(is, line))
 			{
 				// Look up symbol and store (test_id, module_name, offset, file, line) into coverage report
 				std::size_t module_name_len = line.find("+");
 				if (module_name_len != std::string::npos) {
 					CoveredAddress covered_address;
-					covered_address.test_identifier = path.path().stem().string();
 					covered_address.module_name = line.substr(0, module_name_len);
 					covered_address.offset = std::strtoul(line.substr(module_name_len, line.size()).c_str(), nullptr, 16);
 					// Init symbol handler.
@@ -154,9 +174,10 @@ int main(int argc, char** argv)
 							printf("TRACE: Found filename (%s) and line (%d)\n", symbol_line.FileName, symbol_line.LineNumber);
 						covered_address.filename = symbol_line.FileName;
 						covered_address.line_number = symbol_line.LineNumber;
-						if (std::regex_match(covered_address.filename, regex)) {
+						// We only add a covered address if it matches the regex and has not yet been added (in case duplicates are dropped).
+						if (std::regex_match(covered_address.filename, regex) && (!drop_duplicate_lines || !test_coverage.Contains(covered_address))) {
 							printf("DEBUG: Adding filename (%s) due to regex match.\n", covered_address.filename.c_str());
-							coverageReport.covered_addresses.push_back(covered_address);
+							test_coverage.covered_addresses.push_back(covered_address);
 						}
 					}
 					else {
@@ -167,6 +188,7 @@ int main(int argc, char** argv)
 					}
 				}
 			}
+			coverage_report.covered_tests.push_back(test_coverage);
 		}
 	}
 	// Cleanup symbol handler.
@@ -174,8 +196,8 @@ int main(int argc, char** argv)
 		printf("DEBUG: Done with symbol handler, cleaning up now...\n");
 		SymCleanup(current_proc_handle);
 	}
-	printf("DEBUG: Writing collected coverage to output file %s.\n", coverageReport.output_file.string().c_str());
-	coverageReport.WriteToFile();
+	printf("DEBUG: Writing collected coverage to output file %s.\n", coverage_report.output_file.string().c_str());
+	coverage_report.SaveAsCSV();
 	// TODO: Add other export strategy here for standardized output format, e.g., to visualize line coverage.
 
 	return 0;
