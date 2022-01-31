@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <regex>
 
 #include "common.h"
 #include "dbghelp.h"
@@ -19,7 +20,6 @@ struct CoveredAddress {
 };
 
 struct CoverageReport {
-	// TODO: add proper constructor
 	std::vector<CoveredAddress> covered_addresses;
 	fs::path output_file;
 
@@ -31,59 +31,20 @@ struct CoverageReport {
 				<< covered_address.module_name << ","
 				<< "+0x" << std::hex << covered_address.offset << ","
 				<< covered_address.filename << ","
-				<< covered_address.line_number << "\n";
+				<< std::dec << covered_address.line_number << "\n";
 		}
 		file_stream.close();
 	}
 };
 
-// Utils.
-BOOL CALLBACK EnumSymProc(
-	PSYMBOL_INFO pSymInfo,
-	ULONG SymbolSize,
-	PVOID UserContext)
-{
-	UNREFERENCED_PARAMETER(UserContext);
-
-	printf("0x%llx %4u %s\n",
-		pSymInfo->Address, SymbolSize, pSymInfo->Name);
-	return TRUE;
-}
-
-BOOL CALLBACK EnumModules(
-	PCTSTR  ModuleName,
-	DWORD64 BaseOfDll,
-	PVOID   UserContext)
-{
-	UNREFERENCED_PARAMETER(UserContext);
-
-	printf("0x%llx %s\n", BaseOfDll, ModuleName);
-	return TRUE;
-}
-
 // Main routine.
 int main(int argc, char** argv)
 {
-	char* root_arg = GetOption("-root", argc, argv);
-	std::string root;
-	if (root_arg)
-		root = std::string(root_arg);
-	else
-		root = std::string(".");
-
-	char* ext_arg = GetOption("-ext", argc, argv);
-	std::string ext;
-	if (ext_arg)
-		ext = std::string(ext_arg);
-	else
-		ext = std::string(".cov");
-
-	char* output_arg = GetOption("-output", argc, argv);
-	fs::path output_file;
-	if (output_arg)
-		output_file = fs::path(output_arg);
-	else
-		output_file = fs::path("coverage.csv");
+	std::string ext = std::string(GetOptionOrDefault("-ext", argc, argv, ".cov"));
+	std::regex regex = std::regex(GetOptionOrDefault("-regex", argc, argv, ".*"));
+	std::string root = std::string(GetOptionOrDefault("-root", argc, argv, "."));
+	fs::path output_file = fs::path(GetOptionOrDefault("-output", argc, argv, "coverage.csv"));
+	bool trace_debug = GetBinaryOption("-trace_debug", argc, argv, false);
 
 	std::list <char*> module_symbol_paths;
 	GetOptionAll("-symbol_path", argc, argv, &module_symbol_paths);
@@ -95,6 +56,8 @@ int main(int argc, char** argv)
 		printf("Options:\n");
 		printf("-ext <file extension for coverage files>\n");
 		printf("\tdefault: .cov\n");
+		printf("-regex <regex for included files>\n");
+		printf("\tdefault: .*\n");
 		printf("-root <root path to search for coverage files>\n");
 		printf("\tdefault: current working directory\n");
 		printf("-symbol_path <symbol path for covered module>\n");
@@ -178,34 +141,6 @@ int main(int argc, char** argv)
 						else {
 							printf("DEBUG: Successfully loaded module (base address): %s (0x%llx)\n", module_name, dwDllBase);
 							loaded_modules[module_name] = dwDllBase;
-							// In order to trigger deferred symbol loading, get module info.
-							_IMAGEHLP_MODULE64 moduleInfo;
-							moduleInfo.SizeOfStruct = sizeof(_IMAGEHLP_MODULE64);
-							printf("DEBUG: Trigger loading module info.\n");
-							if (SymGetModuleInfo64(current_proc_handle, dwDllBase, &moduleInfo)) {
-								printf("DEBUG: Loaded module info, image name (%s), base address (0x%llx)\n",
-									moduleInfo.ImageName, moduleInfo.BaseOfImage);
-							}
-							if (SymEnumSymbols(current_proc_handle,     // Process handle from SymInitialize.
-								dwDllBase,								// Base address of module.
-								"unittests!foo*",						// Name of symbols to match.
-								EnumSymProc,							// Symbol handler procedure.
-								NULL))									// User context.
-							{
-								// SymEnumSymbols succeeded
-							}
-							else
-							{
-								printf("SymEnumSymbols failed: %d\n", GetLastError());
-							}
-							if (SymEnumerateModules64(current_proc_handle, EnumModules, NULL))
-							{
-							}
-							else
-							{
-								error = GetLastError();
-								printf("SymEnumerateModules64 returned error : %d\n", error);
-							}
 						}
 					}
 					DWORD dwDisplacement;
@@ -213,19 +148,22 @@ int main(int argc, char** argv)
 					memset(&symbol_line, 0x0, sizeof(symbol_line));
 					symbol_line.SizeOfStruct = sizeof(symbol_line);
 					printf("DEBUG: Starting to load symbol info for line: %s\n", line.c_str());
-					printf("DEBUG: SymGetLineFromAddr64(0x%llx + 0x%llx)\n", loaded_modules[module_name], covered_address.offset);
+					if (trace_debug)
+						printf("TRACE: SymGetLineFromAddr64(0x%llx + 0x%llx)\n", loaded_modules[module_name], covered_address.offset);
 					if (SymGetLineFromAddr64(current_proc_handle, loaded_modules[module_name] + covered_address.offset, &dwDisplacement, &symbol_line)) {
+						if (trace_debug)
+							printf("TRACE: Found filename (%s) and line (%d)\n", symbol_line.FileName, symbol_line.LineNumber);
 						covered_address.filename = symbol_line.FileName;
 						covered_address.line_number = symbol_line.LineNumber;
-						printf("DEBUG: Found filename (%s) and line (%d)\n", covered_address.filename, covered_address.line_number);
-						coverageReport.covered_addresses.push_back(covered_address);
+						if (std::regex_match(covered_address.filename, regex)) {
+							printf("DEBUG: Adding filename (%s) due to regex match.\n", covered_address.filename.c_str());
+							coverageReport.covered_addresses.push_back(covered_address);
+						}
 					}
 					else {
 						error = GetLastError();
 						if (error != ERROR_SUCCESS) {
-							printf("ERROR: SymGetLineFromAddr64 returned error: %d\n", error);
-							SymCleanup(current_proc_handle);
-							return 1;
+							printf("TRACE: SymGetLineFromAddr64 returned error: %d\n", error);
 						}
 					}
 				}
@@ -237,6 +175,7 @@ int main(int argc, char** argv)
 		SymCleanup(current_proc_handle);
 	}
 	coverageReport.WriteToFile();
+	// TODO: Add other export strategy here for standardized output format, e.g., to visualize line coverage.
 
 	return 0;
 }

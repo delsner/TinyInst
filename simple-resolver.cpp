@@ -35,14 +35,10 @@ BOOL CALLBACK EnumModules(
 }
 
 // Main routine.
+// This program simply aims to demonstrate querying symbol files (.pdb) for arbitrary image files (.exe, .dll, .sym, ...) using `dbghelp.dll`.
 int main(int argc, char** argv)
 {
-	char* image_arg = GetOption("-image", argc, argv);
-	std::string image_path;
-	if (image_arg)
-		image_path = std::string(image_arg);
-	else
-		image_path = std::string(".");
+	std::string image_path = std::string(GetOptionOrDefault("-image", argc, argv, "."));
 
 	if (argc < 2) {
 		printf("Usage:\n");
@@ -129,10 +125,11 @@ int main(int argc, char** argv)
 
 	DWORD dwDisplacement;
 	IMAGEHLP_LINE64 symbol_line;
+	int symbol_address = 0x1131;
 	memset(&symbol_line, 0x0, sizeof(symbol_line));
 	symbol_line.SizeOfStruct = sizeof(symbol_line);
-	printf("DEBUG: Looking up symbol at address: %llx (%llx + %llx)\n", (dwDllBase + 0x1af80), dwDllBase, 0x1af80);
-	if (SymGetLineFromAddr64(current_proc_handle, dwDllBase + 0x1af80, &dwDisplacement, &symbol_line)) {
+	printf("DEBUG: Looking up symbol at address: %llx (%llx + %llx)\n", (dwDllBase + symbol_address), dwDllBase, symbol_address);
+	if (SymGetLineFromAddr64(current_proc_handle, dwDllBase + symbol_address, &dwDisplacement, &symbol_line)) {
 		printf("DEBUG: Found filename (%s) and line (%d)\n", symbol_line.FileName, symbol_line.LineNumber);
 	}
 	else {

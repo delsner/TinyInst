@@ -150,11 +150,4 @@ add_executable(litecov-resolver
 
 target_link_libraries(litecov-resolver tinyinst)
 
-project("resolver")
-
-add_executable(resolver
-  "resolver.cpp"
-)
-
-target_link_libraries(resolver tinyinst)
 endif()
