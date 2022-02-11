@@ -1772,7 +1772,7 @@ DebuggerStatus Debugger::Kill() {
 }
 
 // attaches to an active process
-DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout) {
+DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout, std::function<void()> callback) {
   attach_mode = true;
 
   if (!DebugActiveProcess(pid)) {
@@ -1811,6 +1811,7 @@ DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout) {
   }
 
   dbg_last_status = DEBUGGER_ATTACHED;
+  callback();
 
   return Continue(timeout);
 }

@@ -57,10 +57,14 @@ void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout, char* 
     if (argc) {
       status = instrumentation->Run(argc, argv, timeout);
     } else {
-      status = instrumentation->Attach(pid, timeout);
-      // Create the coverage output file, as its existence may be used for signaling the traced process that it can continue.
-      FILE* fp = fopen(coverage_output_file, "wb+");
-      fclose(fp);
+      auto callbackFn = [&]() -> void {
+        printf("Attached to process with PID %i.\n", pid);
+        // Create the coverage output file, as its existence may be used for signaling the traced process that it can continue.
+        printf("Touching coverage output file: %s.\n", coverage_output_file);
+        FILE* fp = fopen(coverage_output_file, "wb+");
+        fclose(fp);
+      };
+      status = instrumentation->Attach(pid, timeout, callbackFn);
     }
   }
 

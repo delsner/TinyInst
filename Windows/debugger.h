@@ -21,6 +21,7 @@ limitations under the License.
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
+#include <functional>
 
 #include "common.h"
 #include "windows.h"
@@ -50,7 +51,7 @@ public:
   DebuggerStatus Run(int argc, char **argv, uint32_t timeout);
   DebuggerStatus Kill();
   DebuggerStatus Continue(uint32_t timeout);
-  DebuggerStatus Attach(unsigned int pid, uint32_t timeout);
+  DebuggerStatus Attach(unsigned int pid, uint32_t timeout, std::function<void()> callback);
 
   bool IsTargetAlive() { return (child_handle != NULL); };
   bool IsTargetFunctionDefined() { return target_function_defined; }
