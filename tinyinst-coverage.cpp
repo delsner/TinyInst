@@ -34,7 +34,7 @@ int cur_iteration;
 // whether it's the whole process or target method
 // and regardless if the target is persistent or not
 // (should know what to do in pretty much all cases)
-void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout) {
+void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout, char* coverage_output_file) {
   DebuggerStatus status;
 
   if (instrumentation->IsTargetFunctionDefined()) {
@@ -58,6 +58,9 @@ void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout) {
       status = instrumentation->Run(argc, argv, timeout);
     } else {
       status = instrumentation->Attach(pid, timeout);
+      // Create the coverage output file, as its existence may be used for signaling the traced process that it can continue.
+      FILE* fp = fopen(coverage_output_file, "wb+");
+      fclose(fp);
     }
   }
 
@@ -156,7 +159,7 @@ int main(int argc, char **argv)
   Coverage coverage, newcoverage;
 
   for (int i = 0; i < num_iterations; i++) {
-    RunTarget(target_argc, target_argv, pid, 0xFFFFFFFF);
+    RunTarget(target_argc, target_argv, pid, 0xFFFFFFFF, outfile);
 
     Coverage newcoverage;
 
