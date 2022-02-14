@@ -1452,7 +1452,8 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     } else {
       // Debug(&DebugEv->u.Exception.ExceptionRecord);
       dbg_continue_status = DBG_EXCEPTION_NOT_HANDLED;
-      return DEBUGGER_CRASHED;
+      // return DEBUGGER_CRASHED; // TODO: understand, why debugger should crash here!
+      return DEBUGGER_CONTINUE;
     }
     break;
   }
