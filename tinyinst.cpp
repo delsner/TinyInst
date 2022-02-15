@@ -1142,9 +1142,7 @@ void TinyInst::Init(int argc, char **argv) {
 
   // Allow passing a file containing all modules (newline-separated).
   // This is useful when cmd.exe has a command line length limit.
-  /* 
   char* module_list_file = GetOption("-instrument_modules_file", argc, argv);
-  std::list<std::string> lines;
   if (module_list_file) {
     if (trace_debug_events)
       printf("TinyInst: Found file containing instrumented modules at %s.\n", module_list_file);
@@ -1152,11 +1150,14 @@ void TinyInst::Init(int argc, char **argv) {
     std::ifstream is(module_list_path);
     std::string line;
     while (std::getline(is, line)) {
-      if (!line.empty())
-        lines.push_back(line);
+      if (!line.empty()) {
+        printf("Found module to instrument: %s.\n", line.c_str());
+        ModuleInfo* new_module = new ModuleInfo();
+        new_module->module_name = std::string(line);
+        instrumented_modules.push_back(new_module);
+      }
     }
   }
-  */
 
 #if defined(__APPLE__) && defined(ARM64)
   std::set <std::string> orig_uniq_mod_names;
