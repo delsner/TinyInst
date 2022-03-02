@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <list>
 #include <set>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -51,7 +52,11 @@ class UnwindGeneratorMacOS;
 // original_code_size * CODE_SIZE_MULTIPLIER +
 // JUMPTABLE_SIZE * child_ptr_size
 // for instrumented code
+#ifdef ARM64
+#define CODE_SIZE_MULTIPLIER 8
+#else
 #define CODE_SIZE_MULTIPLIER 4
+#endif
 
 typedef struct xed_decoded_inst_s xed_decoded_inst_t;
 
@@ -237,6 +242,8 @@ private:
 
   bool instrumentation_disabled;
   bool instrument_modules_on_load;
+  
+  bool full_address_map;
 
   PatchModuleEntriesValue patch_module_entries;
 
@@ -281,6 +288,9 @@ class ModuleInfo {
   char *instrumented_code_remote_previous;
 
   std::unordered_map<uint32_t, uint32_t> basic_blocks;
+
+  // instrumented address to original address
+  std::map<size_t, size_t> address_map;
 
   size_t br_indirect_newtarget_global;
 
