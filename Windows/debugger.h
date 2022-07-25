@@ -203,6 +203,7 @@ protected:
   bool attach_mode;
   bool trace_debug_events;
   bool crash_on_access_violation;
+  bool parse_debug_string_event;
 
   bool sinkhole_stds;
   uint64_t mem_limit;

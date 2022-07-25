@@ -151,6 +151,7 @@ int main(int argc, char **argv)
   persist = GetBinaryOption("-persist", argc, argv, false);
   num_iterations = GetIntOption("-iterations", argc, argv, 1);
   char *outfile = GetOption("-coverage_file", argc, argv);
+  bool dump_binary = GetBinaryOption("-dump_binary", argc, argv, false);
 
   if (!target_argc && !pid) {
     printf("Usage:\n");
@@ -178,7 +179,14 @@ int main(int argc, char **argv)
     MergeCoverage(coverage, newcoverage);
   }
  
-  if (outfile) WriteCoverage(coverage, outfile);
+  if (outfile) {
+      if (dump_binary) {
+          WriteCoverageBinary(coverage, outfile);
+      }
+      else {
+          WriteCoverage(coverage, outfile);
+      }
+  }
 
   instrumentation->Kill();
 

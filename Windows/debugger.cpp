@@ -1568,10 +1568,12 @@ DebuggerStatus Debugger::DebugLoop(uint32_t timeout, bool killing)
       break;
 
     case OUTPUT_DEBUG_STRING_EVENT:
-      if (trace_debug_events)
-        printf("Debugger: Received output debug string\n");
-      OnOutputDebugString(CopyAndConvertDebugString(DebugEv->u.DebugString));
-      break;
+      if (parse_debug_string_event) {
+          if (trace_debug_events)
+              printf("Debugger: Received output debug string\n");
+          OnOutputDebugString(CopyAndConvertDebugString(DebugEv->u.DebugString));
+          break;
+      }
    default:
       break;
     }
@@ -1872,6 +1874,7 @@ void Debugger::Init(int argc, char **argv) {
   loop_mode = false;
   target_function_defined = false;
   crash_on_access_violation = false;
+  parse_debug_string_event = false;
 
   target_return_value = 0;
 

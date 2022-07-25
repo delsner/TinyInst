@@ -50,6 +50,7 @@ void LiteCov::Init(int argc, char **argv) {
   compare_coverage = GetBinaryOption("-cmp_coverage", argc, argv, false);
 
   dump_debug = GetBinaryOption("-dump_on_debug", argc, argv, false);
+  parse_debug_string_event = dump_debug;
 
   for (ModuleInfo *module : instrumented_modules) {
     module->client_data = new ModuleCovData();
