@@ -1423,7 +1423,7 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     }
   }
 
-  // check if cleient can handle it
+  // check if client can handle it
   if (OnException(&last_exception)) {
     return DEBUGGER_CONTINUE;
   }
@@ -1452,8 +1452,8 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     } else {
       // Debug(&DebugEv->u.Exception.ExceptionRecord);
       dbg_continue_status = DBG_EXCEPTION_NOT_HANDLED;
-      // return DEBUGGER_CRASHED; // TODO: understand, why debugger should crash here!
-      return DEBUGGER_CONTINUE;
+      if (trace_debug_events) printf("Debugger: Unhandled access violation %p accessed %p\n", (void*) exception_record->ip, exception_record->access_address);
+      return crash_on_access_violation ? DEBUGGER_CRASHED : DEBUGGER_CONTINUE;
     }
     break;
   }
@@ -1871,6 +1871,7 @@ void Debugger::Init(int argc, char **argv) {
   trace_debug_events = false;
   loop_mode = false;
   target_function_defined = false;
+  crash_on_access_violation = false;
 
   target_return_value = 0;
 
@@ -1920,6 +1921,8 @@ void Debugger::Init(int argc, char **argv) {
   }
 
   force_dep = GetBinaryOption("-force_dep", argc, argv, false);
+
+  crash_on_access_violation = GetBinaryOption("-crash_on_access_violation", argc, argv, false);
 
   // check if we are running in persistence mode
   if (target_module[0] || target_offset || target_method[0]) {

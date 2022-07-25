@@ -1175,7 +1175,7 @@ void TinyInst::Init(int argc, char **argv) {
     std::string line;
     while (std::getline(is, line)) {
       if (!line.empty()) {
-        printf("Found module to instrument: %s.\n", line.c_str());
+        if (trace_debug_events) printf("TinyInst: Found module to instrument in file %s\n", line.c_str());
         ModuleInfo* new_module = new ModuleInfo();
         new_module->module_name = std::string(line);
         instrumented_modules.push_back(new_module);
