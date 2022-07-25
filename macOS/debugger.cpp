@@ -936,6 +936,64 @@ void Debugger::ProtectCodeRanges(std::list<AddressRange> *executable_ranges) {
   }
 }
 
+void Debugger::PatchPointersRemote(void *base_address, std::unordered_map<size_t, size_t>& search_replace) {
+  mach_header_64 mach_header;
+  GetMachHeader(base_address, &mach_header);
+
+  void *load_commands_buffer = NULL;
+  GetLoadCommandsBuffer(base_address, &mach_header, &load_commands_buffer);
+
+  segment_command_64 *text_cmd = NULL;
+  if (!GetLoadCommand(mach_header, load_commands_buffer, LC_SEGMENT_64, "__TEXT", &text_cmd)) {
+    FATAL("Unable to find __TEXT command in ExtractCodeRanges\n");
+  }
+  uint64_t file_vm_slide = (uint64_t)base_address - text_cmd->vmaddr;
+
+  uint64_t load_cmd_addr = (uint64_t)load_commands_buffer;
+  for (uint32_t i = 0; i < mach_header.ncmds; ++i) {
+    load_command *load_cmd = (load_command *)load_cmd_addr;
+    if (load_cmd->cmd == LC_SEGMENT_64) {
+      segment_command_64 *segment_cmd = (segment_command_64*)load_cmd;
+
+      if (!strcmp(segment_cmd->segname, "__PAGEZERO")
+          || !strcmp(segment_cmd->segname, "__LINKEDIT")) {
+        load_cmd_addr += load_cmd->cmdsize;
+        continue;
+      }
+
+      mach_vm_address_t segment_start_addr = (mach_vm_address_t)segment_cmd->vmaddr + file_vm_slide;
+      mach_vm_address_t segment_end_addr = (mach_vm_address_t)segment_cmd->vmaddr + file_vm_slide + segment_cmd->vmsize;
+
+      PatchPointersRemote(segment_start_addr, segment_end_addr, search_replace);
+    }
+
+    load_cmd_addr += load_cmd->cmdsize;
+  }
+
+  free(load_commands_buffer);
+}
+
+void Debugger::PatchPointersRemote(size_t min_address, size_t max_address, std::unordered_map<size_t, size_t>& search_replace) {
+  size_t module_size = max_address - min_address;
+  char* buf = (char *)malloc(module_size);
+  RemoteRead((void *)min_address, buf, module_size);
+
+  size_t remote_address = min_address;
+  for (size_t i = 0; i < (module_size - child_ptr_size + 1); i++) {
+    size_t ptr = *(size_t *)(buf + i);
+    auto iter = search_replace.find(ptr);
+    if (iter != search_replace.end()) {
+      // printf("patching entry %zx at address %zx\n", (size_t)ptr, remote_address);
+      size_t fixed_ptr = (size_t)iter->second;
+      RemoteWrite((void *)remote_address, &fixed_ptr, child_ptr_size);
+    }
+    remote_address += 1;
+  }
+
+  free(buf);
+}
+
+
 void Debugger::GetImageSize(void *base_address, size_t *min_address, size_t *max_address) {
   mach_header_64 mach_header;
   GetMachHeader(base_address, &mach_header);
@@ -1209,7 +1267,7 @@ void Debugger::OnProcessCreated() {
         if (attach_mode || IsDyld((void*)mach_header_addr)) {
           char *base_name = strrchr((char*)path, '/');
           base_name = (base_name) ? base_name + 1 : (char*)path;
-          OnModuleLoaded((void*)mach_header_addr, (char*)path);
+          OnModuleLoaded((void*)mach_header_addr, (char*)base_name);
         }
       });
 
@@ -1512,6 +1570,16 @@ DebuggerStatus Debugger::DebugLoop(uint32_t timeout) {
     dbg_continue_needed = false;
     dbg_reply_needed = false;
 
+    if(target_memory_limit && alive && !killing_target) {
+      vm_size_t mem_size = mach_target->MemSize();
+      if(mem_size > target_memory_limit) {
+        WARN("Target exceeded memory limit");
+        task_suspend(mach_target->Task());
+        dbg_continue_needed = true;
+        return DEBUGGER_HANGED;
+      }
+    }
+
     uint64_t begin_time = GetCurTime();
     kern_return_t krt = mach_target->WaitForException(std::min(timeout, (uint32_t)100),
                                                       request_buffer,
@@ -1545,6 +1613,7 @@ DebuggerStatus Debugger::DebugLoop(uint32_t timeout) {
 
     task_suspend(mach_target->Task());
     dbg_continue_needed = true;
+
 
     /* mach_exc_server calls catch_mach_exception_raise
        HandleExceptionInternal returns in ret_HandleExceptionInternal */
@@ -1789,7 +1858,6 @@ void Debugger::AttachToProcess() {
   killing_target = false;
   dbg_continue_needed = false;
   dbg_reply_needed = false;
-  child_entrypoint_reached = false;
   target_reached = false;
 
   DeleteBreakpoints();
@@ -1811,6 +1879,7 @@ void Debugger::AttachToProcess() {
 DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout) {
   attach_mode = true;
   mach_target = new MachTarget(pid);
+  child_entrypoint_reached = true;
 
   AttachToProcess();
   return Continue(timeout);
@@ -1824,6 +1893,7 @@ DebuggerStatus Debugger::Run(char *cmd, uint32_t timeout) {
 
 DebuggerStatus Debugger::Run(int argc, char **argv, uint32_t timeout) {
   attach_mode = false;
+  child_entrypoint_reached = false;
 
   StartProcess(argc, argv);
   AttachToProcess();
@@ -1938,4 +2008,8 @@ void Debugger::Init(int argc, char **argv) {
           dlsym(RTLD_DEFAULT, "_dyld_process_info_for_each_image");
   m_dyld_process_info_release =
       (void (*)(void *info))dlsym(RTLD_DEFAULT, "_dyld_process_info_release");
+
+  target_memory_limit = 0;
+  option = GetOption("-mem_limit", argc, argv);
+  if (option) target_memory_limit = (uint64_t)strtoul(option, NULL, 0) * 1024 * 1024;
 }

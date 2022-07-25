@@ -145,6 +145,9 @@ void MachTarget::ReplyToException(mach_msg_header_t *rpl) {
                 MACH_PORT_NULL);           /* notify port, unused */
 
   if (krt != MACH_MSG_SUCCESS) {
+    // the target could be terminated at this point, check if that's the case
+    if(!IsTaskValid() || !IsExceptionPortValid()) return;
+
     FATAL("Error (%s) sending reply to exception port\n", mach_error_string(krt));
   }
 }
@@ -320,6 +323,21 @@ vm_size_t MachTarget::PageSize() {
   }
 
   return m_page_size;
+}
+
+vm_size_t MachTarget::MemSize() {
+  kern_return_t krt;
+
+  task_vm_info_data_t vm_info;
+  mach_msg_type_number_t info_count = TASK_VM_INFO_COUNT;
+  krt = task_info(task, TASK_VM_INFO, (task_info_t)&vm_info, &info_count);
+
+  if (krt != KERN_SUCCESS) {
+    // if this failed, the target is most likely dead
+    return 0;
+  }
+
+  return vm_info.resident_size;
 }
 
 dyld_all_image_infos MachTarget::GetAllImageInfos() {
