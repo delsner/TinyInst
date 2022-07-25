@@ -1452,7 +1452,7 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     } else {
       // Debug(&DebugEv->u.Exception.ExceptionRecord);
       dbg_continue_status = DBG_EXCEPTION_NOT_HANDLED;
-      if (trace_debug_events) printf("Debugger: Unhandled access violation %p accessed %p\n", (void*) exception_record->ip, exception_record->access_address);
+      if (trace_debug_events) printf("Debugger: Unhandled access violation %p accessed %p\n", (void*) last_exception.ip, last_exception.access_address);
       return crash_on_access_violation ? DEBUGGER_CRASHED : DEBUGGER_CONTINUE;
     }
     break;
