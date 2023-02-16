@@ -34,7 +34,7 @@ int cur_iteration;
 // whether it's the whole process or target method
 // and regardless if the target is persistent or not
 // (should know what to do in pretty much all cases)
-void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout) {
+void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout, char* coverage_output_file) {
   DebuggerStatus status;
 
   if (instrumentation->IsTargetFunctionDefined()) {
@@ -57,7 +57,14 @@ void RunTarget(int argc, char **argv, unsigned int pid, uint32_t timeout) {
     if (argc) {
       status = instrumentation->Run(argc, argv, timeout);
     } else {
-      status = instrumentation->Attach(pid, timeout);
+      auto callbackFn = [&]() -> void {
+        printf("Attached to process with PID %i.\n", pid);
+        // Create the coverage output file, as its existence may be used for signaling the traced process that it can continue.
+        printf("Touching coverage output file: %s.\n", coverage_output_file);
+        FILE* fp = fopen(coverage_output_file, "wb+");
+        fclose(fp);
+      };
+      status = instrumentation->Attach(pid, timeout, callbackFn);
     }
   }
 
@@ -144,6 +151,7 @@ int main(int argc, char **argv)
   persist = GetBinaryOption("-persist", argc, argv, false);
   num_iterations = GetIntOption("-iterations", argc, argv, 1);
   char *outfile = GetOption("-coverage_file", argc, argv);
+  bool dump_binary = GetBinaryOption("-dump_binary", argc, argv, false);
 
   if (!target_argc && !pid) {
     printf("Usage:\n");
@@ -156,7 +164,7 @@ int main(int argc, char **argv)
   Coverage coverage, newcoverage;
 
   for (int i = 0; i < num_iterations; i++) {
-    RunTarget(target_argc, target_argv, pid, 0xFFFFFFFF);
+    RunTarget(target_argc, target_argv, pid, 0xFFFFFFFF, outfile);
 
     Coverage newcoverage;
 
@@ -171,7 +179,14 @@ int main(int argc, char **argv)
     MergeCoverage(coverage, newcoverage);
   }
  
-  if (outfile) WriteCoverage(coverage, outfile);
+  if (outfile) {
+      if (dump_binary) {
+          WriteCoverageBinary(coverage, outfile);
+      }
+      else {
+          WriteCoverage(coverage, outfile);
+      }
+  }
 
   instrumentation->Kill();
 

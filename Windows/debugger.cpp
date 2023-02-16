@@ -19,6 +19,7 @@ limitations under the License.
 #include <stdio.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <atlstr.h>
 
 #include "windows.h"
 #include "psapi.h"
@@ -464,6 +465,35 @@ void *Debugger::RemoteAllocateAfter(uint64_t min_address,
   }
 
   return ret_address;
+}
+
+// Read debug string from debugee's address space and convert to regular string.
+// Shamelessly taken from: https://www.codeproject.com/Articles/43682/Writing-a-basic-Windows-debugger
+std::string Debugger::CopyAndConvertDebugString(OUTPUT_DEBUG_STRING_INFO& DebugString)
+{
+    CStringW strEventMessage;  // Force Unicode
+
+    // Don't care if string is ANSI, we allocate double with WCHAR.
+    WCHAR* msg = new WCHAR[DebugString.nDebugStringLength];
+
+    ReadProcessMemory(child_handle,       // HANDLE to debuggee
+        DebugString.lpDebugStringData,    // Target process' valid pointer
+        msg,                              // Copy to this address space
+        DebugString.nDebugStringLength,
+        NULL);
+
+    // `fUnicode` will be set to 1 in case of unicode string.
+    if (DebugString.fUnicode)
+        strEventMessage = msg;
+    else
+        strEventMessage = (char*)msg; // char* to CStringW (Unicode) conversion.
+
+    // Convert unicode string to regular C++ string.
+    std::string debug_string = std::string(CW2A(strEventMessage, CP_UTF8));
+
+    // TODO: check if this can leak in case ReadProcessMemory fails (returns 0)
+    delete[]msg;
+    return debug_string;
 }
 
 void Debugger::RemoteFree(void *address, size_t size) {
@@ -1404,7 +1434,7 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     }
   }
 
-  // check if cleient can handle it
+  // check if client can handle it
   if (OnException(&last_exception)) {
     return DEBUGGER_CONTINUE;
   }
@@ -1433,7 +1463,8 @@ DebuggerStatus Debugger::HandleExceptionInternal(EXCEPTION_RECORD *exception_rec
     } else {
       // Debug(&DebugEv->u.Exception.ExceptionRecord);
       dbg_continue_status = DBG_EXCEPTION_NOT_HANDLED;
-      return DEBUGGER_CRASHED;
+      if (trace_debug_events) printf("Debugger: Unhandled access violation %p accessed %p\n", (void*) last_exception.ip, last_exception.access_address);
+      return crash_on_access_violation ? DEBUGGER_CRASHED : DEBUGGER_CONTINUE;
     }
     break;
   }
@@ -1547,6 +1578,13 @@ DebuggerStatus Debugger::DebugLoop(uint32_t timeout, bool killing)
       OnModuleUnloaded(DebugEv->u.UnloadDll.lpBaseOfDll);
       break;
 
+    case OUTPUT_DEBUG_STRING_EVENT:
+      if (parse_debug_string_event) {
+          if (trace_debug_events)
+              printf("Debugger: Received output debug string\n");
+          OnOutputDebugString(CopyAndConvertDebugString(DebugEv->u.DebugString));
+          break;
+      }
    default:
       break;
     }
@@ -1748,7 +1786,7 @@ DebuggerStatus Debugger::Kill() {
 }
 
 // attaches to an active process
-DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout) {
+DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout, std::function<void()> callback) {
   attach_mode = true;
 
   if (!DebugActiveProcess(pid)) {
@@ -1787,6 +1825,7 @@ DebuggerStatus Debugger::Attach(unsigned int pid, uint32_t timeout) {
   }
 
   dbg_last_status = DEBUGGER_ATTACHED;
+  callback();
 
   return Continue(timeout);
 }
@@ -1845,6 +1884,8 @@ void Debugger::Init(int argc, char **argv) {
   trace_debug_events = false;
   loop_mode = false;
   target_function_defined = false;
+  crash_on_access_violation = false;
+  parse_debug_string_event = false;
 
   target_return_value = 0;
 
@@ -1894,6 +1935,8 @@ void Debugger::Init(int argc, char **argv) {
   }
 
   force_dep = GetBinaryOption("-force_dep", argc, argv, false);
+
+  crash_on_access_violation = GetBinaryOption("-crash_on_access_violation", argc, argv, false);
 
   // check if we are running in persistence mode
   if (target_module[0] || target_offset || target_method[0]) {

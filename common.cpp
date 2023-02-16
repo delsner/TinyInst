@@ -71,6 +71,12 @@ char *GetOption(const char *name, int argc, char** argv) {
   return NULL;
 }
 
+char *GetOptionOrDefault(const char* name, int argc, char** argv, char* default_value) {
+  char* value = GetOption(name, argc, argv);
+  if (!value)
+    return default_value;
+  return value;
+}
 
 void GetOptionAll(const char *name, int argc, char** argv, std::list<char *> *results) {
   for (int i = 0; i < argc; i++) {

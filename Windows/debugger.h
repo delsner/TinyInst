@@ -21,6 +21,7 @@ limitations under the License.
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
+#include <functional>
 
 #include "common.h"
 #include "windows.h"
@@ -64,7 +65,7 @@ public:
   DebuggerStatus Run(int argc, char **argv, uint32_t timeout);
   DebuggerStatus Kill();
   DebuggerStatus Continue(uint32_t timeout);
-  DebuggerStatus Attach(unsigned int pid, uint32_t timeout);
+  DebuggerStatus Attach(unsigned int pid, uint32_t timeout, std::function<void()> callback);
 
   bool IsTargetAlive() { return (child_handle != NULL); };
   bool IsTargetFunctionDefined() { return target_function_defined; }
@@ -97,8 +98,9 @@ protected:
   virtual void OnModuleUnloaded(void *module);
   virtual void OnTargetMethodReached() {}
   virtual void OnProcessCreated();
-  virtual void OnProcessExit() {};
+  virtual void OnProcessExit() {}
   virtual void OnEntrypoint();
+  virtual void OnOutputDebugString(std::string debug_string) {}
 
   // should return true if the exception has been handled
   virtual bool OnException(Exception *exception_record) {
@@ -189,6 +191,7 @@ private:
                             uint64_t max_address,
                             size_t size,
                             MemoryProtection protection);
+  std::string CopyAndConvertDebugString(OUTPUT_DEBUG_STRING_INFO& DebugString);
 
 protected:
 
@@ -214,6 +217,8 @@ protected:
   bool loop_mode;
   bool attach_mode;
   bool trace_debug_events;
+  bool crash_on_access_violation;
+  bool parse_debug_string_event;
 
   bool sinkhole_stds;
   uint64_t mem_limit;
